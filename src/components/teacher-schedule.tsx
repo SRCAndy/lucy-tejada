@@ -76,6 +76,11 @@ export default function TeacherSchedule({ teacherId }: TeacherScheduleProps) {
     };
 
     loadSchedules();
+    
+    // Recargar horarios cada 5 segundos para detectar nuevos cursos
+    const interval = setInterval(loadSchedules, 5000);
+    
+    return () => clearInterval(interval);
   }, [teacherId]);
 
   // Cargar cursos del profesor

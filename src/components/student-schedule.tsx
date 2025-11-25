@@ -47,6 +47,11 @@ export default function StudentSchedule({ studentId }: StudentScheduleProps) {
     };
 
     loadSchedules();
+    
+    // Recargar horarios cada 5 segundos para detectar nuevas matriculaciones
+    const interval = setInterval(loadSchedules, 5000);
+    
+    return () => clearInterval(interval);
   }, [studentId]);
 
   const daysOfWeek = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
