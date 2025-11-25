@@ -59,28 +59,46 @@ const client = new Client({
       WHERE course_id = $1
     `;
 
+    console.log(`[ENROLLMENTS] Obteniendo horarios para el curso ${courseId}`);
+
     const schedulesResult = await client.query(schedulesQuery, [courseId]);
+
+    console.log(`[ENROLLMENTS] Se encontraron ${schedulesResult.rows.length} horarios para el curso`);
+
+    if (schedulesResult.rows.length === 0) {
+      console.warn(`[ENROLLMENTS] ⚠️ No hay horarios definidos para el curso ${courseId}`);
+    }
 
     // Crear registros de horario para el estudiante
     const studentSchedules = [];
     for (const schedule of schedulesResult.rows) {
-      const studentScheduleId = uuidv4();
-      const studentScheduleQuery = `
-        INSERT INTO student_schedules (id, student_id, course_id, schedule_id)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT DO NOTHING
-        RETURNING id, student_id, course_id, schedule_id
-      `;
+      try {
+        const studentScheduleId = uuidv4();
+        const studentScheduleQuery = `
+          INSERT INTO student_schedules (id, student_id, course_id, schedule_id)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT DO NOTHING
+          RETURNING id, student_id, course_id, schedule_id
+        `;
 
-      const studentScheduleResult = await client.query(studentScheduleQuery, [
-        studentScheduleId,
-        studentId,
-        courseId,
-        schedule.id,
-      ]);
+        console.log(`[ENROLLMENTS] Vinculando horario ${schedule.id} al estudiante`);
 
-      if (studentScheduleResult.rows.length > 0) {
-        studentSchedules.push(studentScheduleResult.rows[0]);
+        const studentScheduleResult = await client.query(studentScheduleQuery, [
+          studentScheduleId,
+          studentId,
+          courseId,
+          schedule.id,
+        ]);
+
+        if (studentScheduleResult.rows.length > 0) {
+          studentSchedules.push(studentScheduleResult.rows[0]);
+          console.log(`[ENROLLMENTS] ✅ Horario vinculado al estudiante`);
+        } else {
+          console.warn(`[ENROLLMENTS] ⚠️ Conflicto al vincular horario (probablemente ya existe)`);
+        }
+      } catch (err) {
+        console.error(`[ENROLLMENTS] ❌ Error vinculando horario:`, err);
+        // No lanzar error, solo continuar
       }
     }
 
@@ -101,6 +119,8 @@ const client = new Client({
 
     await client.query(updateCoursesQuery, [courseId]);
 
+    console.log(`[ENROLLMENTS] ✅ Se vincularon ${studentSchedules.length} horarios al estudiante`);
+
     await client.end();
 
     return NextResponse.json(
@@ -108,6 +128,7 @@ const client = new Client({
         message: '✅ Estudiante matriculado correctamente',
         enrollment: enrollmentResult.rows[0],
         studentSchedules: studentSchedules,
+        schedules_created: studentSchedules.length,
       },
       { status: 201 }
     );

@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
+import { v4 as uuidv4 } from "uuid";
 import {
   Accordion,
   AccordionContent,
@@ -10,7 +11,7 @@ import {
 } from "@/components/ui/accordion"
 import { Card, CardContent } from "@/components/ui/card"
 import { PageHeader } from "@/components/page-header"
-import { Users, Clock, Check, FilePenLine, PlusCircle, Calendar as CalendarIcon, Loader2, AlertCircle } from "lucide-react"
+import { Users, Clock, Check, FilePenLine, PlusCircle, Calendar as CalendarIcon, Loader2, AlertCircle, X } from "lucide-react"
 import { getAuthToken, getSessionFromStorage } from "@/lib/auth"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -62,14 +63,12 @@ interface CourseWithStudents extends Course {
 
 function AddGradeDialog({ onAddGrade }: { onAddGrade: (name: string) => void }) {
   const [name, setName] = useState('');
-  const [percentage, setPercentage] = useState('');
   const [isOpen, setIsOpen] = useState(false);
 
   const handleAdd = () => {
-    if (name && percentage) {
-      onAddGrade(`${name} (${percentage}%)`);
+    if (name) {
+      onAddGrade(name);
       setName('');
-      setPercentage('');
       setIsOpen(false);
     }
   }
@@ -86,7 +85,7 @@ function AddGradeDialog({ onAddGrade }: { onAddGrade: (name: string) => void }) 
         <DialogHeader>
           <DialogTitle>Añadir Nueva Calificación</DialogTitle>
           <DialogDescription>
-            Ingrese el nombre y el porcentaje de la nueva evaluación.
+            Ingrese el nombre de la nueva evaluación.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -99,20 +98,7 @@ function AddGradeDialog({ onAddGrade }: { onAddGrade: (name: string) => void }) 
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="col-span-3"
-              placeholder="Ej: Taller 3"
-            />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="grade-percentage" className="text-right">
-              Porcentaje
-            </Label>
-            <Input
-              id="grade-percentage"
-              type="number"
-              value={percentage}
-              onChange={(e) => setPercentage(e.target.value)}
-              className="col-span-3"
-              placeholder="Ej: 10"
+              placeholder="Ej: Taller 3, Parcial 1, etc"
             />
           </div>
         </div>
@@ -130,8 +116,13 @@ export default function TeacherCoursesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [attendanceDates, setAttendanceDates] = useState(["28-Oct", "30-Oct", "04-Nov", "06-Nov", "11-Nov"]);
-  const [assignments, setAssignments] = useState(["Parcial 1 (25%)", "Taller 2 (15%)", "Examen Final (30%)", "Nota Final"]);
   const [newDate, setNewDate] = useState<Date | undefined>(new Date());
+  const [teacherId, setTeacherId] = useState('');
+  const [attendanceData, setAttendanceData] = useState<Record<string, Record<string, Record<string, boolean>>>>({});
+  const [savingAttendance, setSavingAttendance] = useState(false);
+  const [gradesData, setGradesData] = useState<Record<string, Record<string, Record<string, number>>>>({});
+  const [gradeTypes, setGradeTypes] = useState<Record<string, Record<string, string>>>({});
+  const [savingGrades, setSavingGrades] = useState(false);
 
   useEffect(() => {
     const loadTeacherCourses = async () => {
@@ -144,6 +135,8 @@ export default function TeacherCoursesPage() {
           setLoading(false);
           return;
         }
+
+        setTeacherId(session.userId);
 
         // Obtener cursos del profesor
         const response = await fetch('/api/teacher/courses', {
@@ -160,21 +153,47 @@ export default function TeacherCoursesPage() {
 
         const coursesData = await response.json();
 
-        // Obtener estudiantes para cada curso
+        // Obtener estudiantes para cada curso y cargar asistencias
         const coursesWithStudents = await Promise.all(
           coursesData.map(async (course: Course) => {
             try {
               const studentsResponse = await fetch(`/api/teacher/courses/${course.id}`);
+              let students: Student[] = [];
               if (studentsResponse.ok) {
                 const courseData = await studentsResponse.json();
-                return {
-                  ...course,
-                  students: courseData.students || []
-                };
+                students = courseData.students || [];
               }
+
+              // Cargar calificaciones del curso
+              try {
+                const gradesResponse = await fetch(`/api/courses/${course.id}/grades?courseId=${course.id}`, {
+                  headers: {
+                    'Authorization': `Bearer ${token}`
+                  }
+                });
+
+                if (gradesResponse.ok) {
+                  const gradesInfo = await gradesResponse.json();
+                  setGradeTypes(prev => ({
+                    ...prev,
+                    [course.id]: gradesInfo.gradeTypes.reduce((acc: any, gt: any) => {
+                      acc[gt.name] = gt.id;
+                      return acc;
+                    }, {})
+                  }));
+                  
+                  setGradesData(prev => ({
+                    ...prev,
+                    [course.id]: gradesInfo.grades
+                  }));
+                }
+              } catch (err) {
+                console.error('Error cargando calificaciones:', err);
+              }
+
               return {
                 ...course,
-                students: []
+                students
               };
             } catch (err) {
               console.error('Error fetching students:', err);
@@ -197,6 +216,184 @@ export default function TeacherCoursesPage() {
 
     loadTeacherCourses();
   }, []);
+
+  const handleAttendanceChange = (courseId: string, studentId: string, date: string, present: boolean) => {
+    setAttendanceData(prev => ({
+      ...prev,
+      [courseId]: {
+        ...prev[courseId],
+        [studentId]: {
+          ...prev[courseId]?.[studentId],
+          [date]: present
+        }
+      }
+    }));
+  };
+
+  const saveAttendance = async (courseId: string) => {
+    if (!teacherId) return;
+
+    setSavingAttendance(true);
+    try {
+      const courseAttendance = attendanceData[courseId] || {};
+      const response = await fetch(`/api/courses/${courseId}/attendance`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          attendance: courseAttendance,
+          teacherId
+        })
+      });
+
+      if (response.ok) {
+        console.log('✅ Asistencias guardadas correctamente');
+      } else {
+        const error = await response.json();
+        console.error(`❌ Error: ${error.error}`);
+      }
+    } catch (err) {
+      console.error('Error guardando asistencias:', err);
+    } finally {
+      setSavingAttendance(false);
+    }
+  };
+
+  const deleteAttendanceDate = async (courseId: string, date: string) => {
+    if (!teacherId) return;
+
+    try {
+      const response = await fetch(`/api/courses/${courseId}/attendance`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          date,
+          teacherId
+        })
+      });
+
+      if (response.ok) {
+        console.log(`✅ Fecha ${date} eliminada`);
+        // Remover la fecha del estado
+        setAttendanceDates(prev => prev.filter(d => d !== date));
+        // Limpiar datos de asistencia para esa fecha
+        setAttendanceData(prev => ({
+          ...prev,
+          [courseId]: Object.keys(prev[courseId] || {}).reduce((acc, studentId) => {
+            const dateStr = date.split('-').reverse().join('-'); // Convertir formato
+            const { [dateStr]: _, ...rest } = prev[courseId][studentId];
+            acc[studentId] = rest;
+            return acc;
+          }, {} as Record<string, Record<string, boolean>>)
+        }));
+      } else {
+        const error = await response.json();
+        console.error(`❌ Error: ${error.error}`);
+      }
+    } catch (err) {
+      console.error('Error eliminando fecha:', err);
+    }
+  };
+
+  const handleGradeChange = (courseId: string, studentId: string, gradeTypeId: string, score: number) => {
+    setGradesData(prev => ({
+      ...prev,
+      [courseId]: {
+        ...prev[courseId],
+        [studentId]: {
+          ...prev[courseId]?.[studentId],
+          [gradeTypeId]: score
+        }
+      }
+    }));
+  };
+
+  const saveGrades = async (courseId: string) => {
+    if (!teacherId) return;
+
+    setSavingGrades(true);
+    try {
+      const courseGrades = gradesData[courseId] || {};
+      const courseGradeTypesMap = gradeTypes[courseId] || {};
+      
+      // Convertir {id: name} a {name: id} para la API
+      const gradeTypesForApi: Record<string, string> = {};
+      Object.entries(courseGradeTypesMap).forEach(([id, name]) => {
+        gradeTypesForApi[name as string] = id;
+      });
+      
+      const response = await fetch(`/api/courses/${courseId}/grades`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          grades: courseGrades,
+          gradeTypes: gradeTypesForApi,
+          teacherId
+        })
+      });
+
+      if (response.ok) {
+        console.log('✅ Calificaciones guardadas correctamente');
+      } else {
+        const error = await response.json();
+        console.error(`❌ Error: ${error.error}`);
+      }
+    } catch (err) {
+      console.error('Error guardando calificaciones:', err);
+    } finally {
+      setSavingGrades(false);
+    }
+  };
+
+  const deleteGradeType = async (courseId: string, gradeTypeId: string, gradeName: string) => {
+    if (!teacherId) return;
+
+    try {
+      const response = await fetch(`/api/courses/${courseId}/grades`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          gradeTypeId,
+          teacherId
+        })
+      });
+
+      if (response.ok) {
+        console.log(`✅ ${gradeName} eliminada`);
+        // Remover del estado
+        setGradeTypes(prev => ({
+          ...prev,
+          [courseId]: Object.fromEntries(
+            Object.entries(prev[courseId] || {}).filter(([id]) => id !== gradeTypeId)
+          )
+        }));
+        // Remover calificaciones de este tipo
+        setGradesData(prev => ({
+          ...prev,
+          [courseId]: Object.fromEntries(
+            Object.entries(prev[courseId] || {}).map(([studentId, grades]) => [
+              studentId,
+              Object.fromEntries(
+                Object.entries(grades || {}).filter(([id]) => id !== gradeTypeId)
+              )
+            ])
+          )
+        }));
+      } else {
+        const error = await response.json();
+        console.error(`❌ Error: ${error.error}`);
+      }
+    } catch (err) {
+      console.error('Error eliminando calificación:', err);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -257,7 +454,20 @@ export default function TeacherCoursesPage() {
                                   <TableHeader>
                                       <TableRow>
                                       <TableHead className="font-bold w-[250px]">Estudiante</TableHead>
-                                      {attendanceDates.map(date => <TableHead key={date} className="text-center">{date}</TableHead>)}
+                                      {attendanceDates.map(date => (
+                                        <TableHead key={date} className="text-center">
+                                          <div className="flex items-center justify-center gap-2">
+                                            <span>{date}</span>
+                                            <button
+                                              onClick={() => deleteAttendanceDate(course.id, date)}
+                                              className="hover:text-red-600 transition-colors"
+                                              title="Eliminar fecha"
+                                            >
+                                              <X className="h-4 w-4" />
+                                            </button>
+                                          </div>
+                                        </TableHead>
+                                      ))}
                                       </TableRow>
                                   </TableHeader>
                                   <TableBody>
@@ -268,16 +478,33 @@ export default function TeacherCoursesPage() {
                                           </TableCell>
                                         </TableRow>
                                       ) : (
-                                        course.students.map(student => (
+                                        course.students.map(student => {
+                                          const studentAttendance = attendanceData[course.id]?.[student.id] || {};
+                                          return (
                                             <TableRow key={student.id}>
                                                 <TableCell className="font-medium">{student.name}</TableCell>
-                                                {attendanceDates.map(date => (
+                                                {attendanceDates.map(date => {
+                                                  // Convertir fecha a YYYY-MM-DD
+                                                  const [day, month] = date.split('-');
+                                                  const currentYear = new Date().getFullYear();
+                                                  const monthIndex = new Date(`${month} 1, 2020`).getMonth();
+                                                  const dateStr = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                                  const isPresent = studentAttendance[dateStr];
+                                                  
+                                                  return (
                                                     <TableCell key={`${student.id}-${date}`} className="text-center">
-                                                        <Checkbox defaultChecked={Math.random() > 0.15}/>
+                                                        <Checkbox 
+                                                          checked={isPresent || false}
+                                                          onCheckedChange={(checked) => 
+                                                            handleAttendanceChange(course.id, student.id, dateStr, checked as boolean)
+                                                          }
+                                                        />
                                                     </TableCell>
-                                                ))}
+                                                  );
+                                                })}
                                             </TableRow>
-                                        ))
+                                          );
+                                        })
                                       )}
                                   </TableBody>
                                   </Table>
@@ -313,7 +540,19 @@ export default function TeacherCoursesPage() {
                                       </div>
                                   </PopoverContent>
                               </Popover>
-                              <Button>Guardar Asistencias</Button>
+                              <Button 
+                                onClick={() => saveAttendance(course.id)}
+                                disabled={savingAttendance}
+                              >
+                                {savingAttendance ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Guardando...
+                                  </>
+                                ) : (
+                                  <>Guardar Asistencias</>
+                                )}
+                              </Button>
                           </div>
                       </TabsContent>
                       
@@ -324,35 +563,45 @@ export default function TeacherCoursesPage() {
                                       <TableHeader>
                                           <TableRow>
                                           <TableHead className="font-bold w-[250px]">Estudiante</TableHead>
-                                          {assignments.map(assignment => <TableHead key={assignment} className="text-center">{assignment}</TableHead>)}
+                                          {Object.keys(gradeTypes[course.id] || {}).map(gradeName => (
+                                            <TableHead key={gradeName} className="text-center">
+                                              <div className="flex items-center justify-center gap-2">
+                                                <span>{gradeName}</span>
+                                              </div>
+                                            </TableHead>
+                                          ))}
                                           </TableRow>
                                       </TableHeader>
                                       <TableBody>
                                           {course.students.length === 0 ? (
                                             <TableRow>
-                                              <TableCell colSpan={assignments.length + 1} className="text-center py-4 text-muted-foreground">
+                                              <TableCell colSpan={(Object.keys(gradeTypes[course.id] || {}).length) + 1} className="text-center py-4 text-muted-foreground">
                                                 No hay estudiantes inscritos en este curso
                                               </TableCell>
                                             </TableRow>
                                           ) : (
-                                            course.students.map(student => (
+                                            course.students.map(student => {
+                                              const studentGrades = gradesData[course.id]?.[student.id] || {};
+                                              return (
                                                 <TableRow key={student.id}>
                                                     <TableCell className="font-medium">{student.name}</TableCell>
-                                                    {assignments.map(assignment => (
-                                                        <TableCell key={`${student.id}-${assignment}`} className="text-center px-1">
+                                                    {Object.entries(gradeTypes[course.id] || {}).map(([gradeTypeId, gradeName]) => (
+                                                        <TableCell key={`${student.id}-${gradeTypeId}`} className="text-center px-1">
                                                             <Input 
                                                                 type="number"
                                                                 min="0"
                                                                 max="5"
                                                                 step="0.1"
-                                                                defaultValue={assignment === 'Nota Final' ? '' : (Math.random() * (5 - 2.5) + 2.5).toFixed(1)}
+                                                                value={studentGrades[gradeTypeId] || ''}
+                                                                onChange={(e) => handleGradeChange(course.id, student.id, gradeTypeId, parseFloat(e.target.value) || 0)}
                                                                 className="text-center mx-auto max-w-20"
-                                                                readOnly={assignment === 'Nota Final'}
+                                                                placeholder="0.0"
                                                                 />
                                                         </TableCell>
                                                     ))}
                                                 </TableRow>
-                                            ))
+                                              );
+                                            })
                                           )}
                                       </TableBody>
                                   </Table>
@@ -360,10 +609,29 @@ export default function TeacherCoursesPage() {
                           </Card>
                           <div className="flex justify-end mt-4 gap-2">
                                <AddGradeDialog onAddGrade={(gradeName: string) => {
-                                 const finalNote = assignments.pop();
-                                 setAssignments(prev => [...prev, gradeName, finalNote!]);
+                                 // Crear nuevo tipo de calificación
+                                 const typeId = uuidv4();
+                                 setGradeTypes(prev => ({
+                                   ...prev,
+                                   [course.id]: {
+                                     ...prev[course.id],
+                                     [typeId]: gradeName
+                                   }
+                                 }));
                                }} />
-                              <Button>Guardar Calificaciones</Button>
+                              <Button 
+                                onClick={() => saveGrades(course.id)}
+                                disabled={savingGrades}
+                              >
+                                {savingGrades ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Guardando...
+                                  </>
+                                ) : (
+                                  <>Guardar Calificaciones</>
+                                )}
+                              </Button>
                           </div>
                       </TabsContent>
 

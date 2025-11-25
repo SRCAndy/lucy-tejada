@@ -51,6 +51,17 @@ export default function TeacherSchedule({ teacherId }: TeacherScheduleProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
 
+  // Función para agrupar bloques por curso
+  const getUniqueCourses = () => {
+    const uniqueCourses = new Map<string, Schedule>();
+    schedules.forEach(schedule => {
+      if (schedule.course_name && !uniqueCourses.has(schedule.course_id)) {
+        uniqueCourses.set(schedule.course_id, schedule);
+      }
+    });
+    return Array.from(uniqueCourses.values());
+  };
+
   useEffect(() => {
     const loadSchedules = async () => {
       if (!teacherId) {
@@ -59,16 +70,18 @@ export default function TeacherSchedule({ teacherId }: TeacherScheduleProps) {
       }
 
       try {
+        console.log('[TEACHER-SCHEDULE] Cargando horarios para profesor:', teacherId);
         const response = await fetch(`/api/admin/schedules?teacherId=${teacherId}`);
         const data = await response.json();
 
         if (response.ok) {
+          console.log('[TEACHER-SCHEDULE] Horarios obtenidos:', data.length);
           setSchedules(data);
         } else {
           setError(data.error || 'Error al cargar horarios');
         }
       } catch (err) {
-        console.error('Error:', err);
+        console.error('[TEACHER-SCHEDULE] Error:', err);
         setError('Error de conexión');
       } finally {
         setLoading(false);
@@ -172,7 +185,7 @@ export default function TeacherSchedule({ teacherId }: TeacherScheduleProps) {
   };
 
   const daysOfWeek = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
-  const timeSlots = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'];
+  const timeSlots = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00'];
 
   if (loading) {
     return (
@@ -233,18 +246,26 @@ export default function TeacherSchedule({ teacherId }: TeacherScheduleProps) {
                             {time} - {nextTime}
                           </td>
                           {daysOfWeek.map((day) => {
-                            const schedule = schedules.find(
+                            // Obtener TODOS los bloques que coinciden con este día y hora
+                            const daySchedules = schedules.filter(
                               (s) =>
-                                s.day_of_week === day && s.start_time.substring(0, 5) === time
+                                s.course_name &&
+                                s.day_of_week === day && 
+                                s.start_time.substring(0, 5) === time
                             );
+                            
                             return (
                               <td key={`${day}-${time}`} className="border p-2 text-center">
-                                {schedule ? (
-                                  <div className="bg-yellow-100 border border-yellow-400 rounded p-2 text-sm">
-                                    <p className="font-semibold">{schedule.course_name}</p>
-                                    <p className="text-xs text-gray-600">
-                                      {schedule.start_time} - {schedule.end_time}
-                                    </p>
+                                {daySchedules.length > 0 ? (
+                                  <div className="space-y-1">
+                                    {daySchedules.map((schedule, idx) => (
+                                      <div key={`${schedule.id}-${idx}`} className="bg-yellow-100 border border-yellow-400 rounded p-2 text-sm">
+                                        <p className="font-semibold">{schedule.course_name}</p>
+                                        <p className="text-xs text-gray-600">
+                                          {schedule.start_time} - {schedule.end_time}
+                                        </p>
+                                      </div>
+                                    ))}
                                   </div>
                                 ) : null}
                               </td>
@@ -259,17 +280,32 @@ export default function TeacherSchedule({ teacherId }: TeacherScheduleProps) {
 
               <div className="mt-6 space-y-2">
                 <h3 className="font-bold text-lg">Resumen de Clases</h3>
-                {schedules.map((schedule) => (
-                  <div key={schedule.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded border">
-                    <div className="w-2 h-2 rounded-full bg-yellow-500 mt-2" />
-                    <div className="flex-1">
-                      <p className="font-semibold">{schedule.course_name}</p>
-                      <p className="text-sm text-gray-600">
-                        {schedule.day_of_week} de {schedule.start_time} a {schedule.end_time}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                {schedules && schedules.length > 0 ? (
+                  getUniqueCourses().map((course) => {
+                    // Obtener todos los bloques de este curso
+                    const courseBlocks = schedules.filter(
+                      s => s.course_id === course.course_id && s.course_name
+                    );
+                    
+                    return (
+                      <div key={course.course_id} className="flex items-start gap-3 p-3 bg-gray-50 rounded border">
+                        <div className="w-2 h-2 rounded-full bg-yellow-500 mt-2" />
+                        <div className="flex-1">
+                          <p className="font-semibold">{course.course_name}</p>
+                          <div className="text-sm text-gray-600 space-y-1 mt-1">
+                            {courseBlocks.map((block, idx) => (
+                              <p key={`${block.id}-${idx}`}>
+                                {block.day_of_week}: {block.start_time} - {block.end_time}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-center text-gray-500 py-4">No hay clases asignadas</p>
+                )}
               </div>
             </CardContent>
           </Card>

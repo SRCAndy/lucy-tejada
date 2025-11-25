@@ -10,6 +10,8 @@ import {
   ClipboardCheck,
   CalendarClock,
   ClipboardList,
+  CheckCircle,
+  Scroll,
 } from "lucide-react"
 
 import { CulturalCenterIcon } from "@/components/icons";
@@ -22,6 +24,8 @@ const navItems = [
   { href: "/student/courses", icon: BookCopy, label: "Cursos" },
   { href: "/student/evaluations", icon: ClipboardCheck, label: "Evaluaciones" },
   { href: "/student/schedule", icon: CalendarClock, label: "Horario" },
+  { href: "/student/attendance", icon: CheckCircle, label: "Asistencia" },
+  { href: "/student/grades", icon: Scroll, label: "Calificaciones" },
 ];
 
 export default function StudentLayout({
