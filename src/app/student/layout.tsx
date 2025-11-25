@@ -3,47 +3,25 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Book,
-  Calendar,
-  PenSquare,
-  PanelLeft,
-  Settings,
   Home,
-  Presentation,
-  ClipboardList,
-  CalendarDays,
+  Settings,
   User,
   BookCopy,
   ClipboardCheck,
-  CalendarClock
+  CalendarClock,
+  ClipboardList,
 } from "lucide-react"
 
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarProvider,
-  SidebarInset,
-  SidebarTrigger,
-  SidebarFooter
-} from "@/components/ui/sidebar"
 import { CulturalCenterIcon } from "@/components/icons";
 import { UserNav } from "@/components/user-nav";
 
 const navItems = [
   { href: "/student/home", icon: Home, label: "Inicio" },
-  { href: "/student/enroll", icon: ClipboardList, label: "Inscripción de Cursos" },
-  { href: "/student/profile", icon: User, label: "Mi Perfil" },
-  { href: "/student/courses", icon: BookCopy, label: "Mis Cursos" },
+  { href: "/student/enroll", icon: ClipboardList, label: "Inscripción" },
+  { href: "/student/profile", icon: User, label: "Perfil" },
+  { href: "/student/courses", icon: BookCopy, label: "Cursos" },
   { href: "/student/evaluations", icon: ClipboardCheck, label: "Evaluaciones" },
-  { href: "/student/schedule", icon: CalendarClock, label: "Mi Horario" },
-];
-
-const bottomNavItems = [
-    { href: "/student/settings", icon: Settings, label: "Configuración" },
+  { href: "/student/schedule", icon: CalendarClock, label: "Horario" },
 ];
 
 export default function StudentLayout({
@@ -54,59 +32,64 @@ export default function StudentLayout({
   const pathname = usePathname();
 
   return (
-    <SidebarProvider>
-      <Sidebar side="left" variant="sidebar" collapsible="icon">
-        <SidebarHeader>
-          <div className="flex items-center gap-2 p-2 justify-center">
-            <CulturalCenterIcon className="w-8 h-8 text-primary" />
-            <span className="text-lg font-semibold font-headline">Lucy Tejada</span>
+    <div className="flex h-screen bg-background">
+      {/* SIDEBAR */}
+      <aside className="w-64 bg-black text-white border-r border-gray-800 flex flex-col">
+        {/* Header */}
+        <div className="p-6 border-b border-gray-800">
+          <div className="flex items-center gap-3">
+            <CulturalCenterIcon className="w-8 h-8 text-yellow-500" />
+            <span className="text-xl font-bold font-headline text-white">Lucy Tejada</span>
           </div>
-        </SidebarHeader>
-        <SidebarContent>
-            <SidebarMenu>
-                {navItems.map((item) => (
-                    <SidebarMenuItem key={item.href}>
-                        <SidebarMenuButton
-                            asChild
-                            isActive={pathname.startsWith(item.href)}
-                        >
-                            <Link href={item.href}>
-                                <item.icon />
-                                <span>{item.label}</span>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                ))}
-            </SidebarMenu>
-        </SidebarContent>
-        <SidebarFooter>
-            <SidebarMenu>
-                {bottomNavItems.map((item) => (
-                    <SidebarMenuItem key={item.href}>
-                        <SidebarMenuButton
-                            asChild
-                            isActive={pathname === item.href}
-                        >
-                            <Link href={item.href}>
-                                <item.icon />
-                                <span>{item.label}</span>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                ))}
-            </SidebarMenu>
-        </SidebarFooter>
-      </Sidebar>
-      <SidebarInset>
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
-          <SidebarTrigger className="sm:hidden" />
-          <div className="flex-1" />
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+          {navItems.map((item) => {
+            const isActive = pathname.startsWith(item.href);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${
+                  isActive
+                    ? 'bg-yellow-500 text-black'
+                    : 'text-white hover:bg-gray-800'
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+                <span className="text-sm font-medium">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-gray-800">
+          <Link
+            href="/student/settings"
+            className="flex items-center gap-3 px-4 py-3 rounded-md text-white hover:bg-gray-800 transition-colors"
+          >
+            <Settings className="w-5 h-5" />
+            <span className="text-sm font-medium">Configuración</span>
+          </Link>
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT */}
+      <div className="flex-1 flex flex-col">
+        {/* Top Bar */}
+        <header className="sticky top-0 z-20 h-16 bg-background border-b border-border px-6 flex items-center justify-between">
+          <h1 className="text-xl font-semibold text-foreground">Lucy Tejada</h1>
           <UserNav profileUrl="/student/profile" settingsUrl="/student/settings" />
         </header>
-        <main className="p-4 sm:px-6 sm:py-0 space-y-4">
+
+        {/* Content */}
+        <main className="flex-1 overflow-y-auto p-6 space-y-6">
           {children}
         </main>
-      </SidebarInset>
-    </SidebarProvider>
+      </div>
+    </div>
   )
 }

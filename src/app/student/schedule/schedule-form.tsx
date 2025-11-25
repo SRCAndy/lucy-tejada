@@ -13,7 +13,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { studentEnrolledCourses, availabilityOptions } from "@/lib/mock-data";
-import { personalizedLearningSchedule, PersonalizedLearningScheduleInput } from "@/ai/flows/personalized-learning-schedule";
 import { useToast } from "@/hooks/use-toast";
 
 const availabilitySchema = z.object({
@@ -49,30 +48,13 @@ export default function ScheduleForm() {
     setIsLoading(true);
     setSchedule(null);
 
-    const input: PersonalizedLearningScheduleInput = {
-      courses: studentEnrolledCourses.map(c => ({
-          name: c.name,
-          creditHours: c.credits,
-          daysOfWeek: c.daysOfWeek,
-          startTime: c.startTime,
-          endTime: c.endTime,
-      })),
-      availability: data.availability,
-    };
-
-    try {
-      const result = await personalizedLearningSchedule(input);
-      setSchedule(result.schedule);
-    } catch (error) {
-      console.error("Error al generar el horario:", error);
-      toast({
-        title: "Error",
-        description: "No se pudo generar el horario. Por favor, inténtelo de nuevo.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    // TODO: Integrar con AI cuando esté disponible
+    toast({
+      title: "Información",
+      description: "La generación de horario con IA estará disponible próximamente.",
+      variant: "default",
+    });
+    setIsLoading(false);
   }
 
   return (

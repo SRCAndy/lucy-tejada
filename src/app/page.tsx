@@ -32,8 +32,24 @@ const roles = [
 ];
 
 export default function Home() {
+  console.log('[HOME PAGE] Renderizando página de inicio');
+  
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background p-4 md:p-8">
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `
+            console.log('[HOME PAGE SCRIPT] Main cargado');
+            const main = document.querySelector('main');
+            if (main) {
+              console.log('[HOME PAGE SCRIPT] Classes en main:', main.className);
+              const computed = window.getComputedStyle(main);
+              console.log('[HOME PAGE SCRIPT] bg-background CSS:', computed.backgroundColor);
+              console.log('[HOME PAGE SCRIPT] Tailwind está:', main.className.includes('bg-') ? 'ACTIVO' : 'INACTIVO');
+            }
+          `,
+        }}
+      />
       <div className="flex flex-col items-center text-center max-w-4xl mx-auto">
         <CulturalCenterIcon className="h-20 w-20 mb-4 text-primary" />
         <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-foreground font-headline">
