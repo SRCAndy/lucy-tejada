@@ -2,6 +2,49 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Client } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 
+// Función para generar bloques de horario basado en créditos
+function generateScheduleBlocks(credits: number): Array<{ dayOfWeek: string; startTime: string; endTime: string }> {
+  const daysOfWeek = ['Lunes', 'Miércoles', 'Viernes'];
+  const blocks: Array<{ dayOfWeek: string; startTime: string; endTime: string }> = [];
+
+  let hoursPerWeek = 0;
+  if (credits === 2) hoursPerWeek = 2;
+  else if (credits === 3) hoursPerWeek = 4;
+  else if (credits === 4) hoursPerWeek = 6;
+
+  // Cada bloque es de 2 horas
+  const numberOfBlocks = hoursPerWeek / 2;
+
+  // Horarios disponibles (en intervalos de 2 horas, desde 6 AM hasta 8 PM)
+  const timeSlots = [
+    { start: '06:00', end: '08:00' },
+    { start: '08:00', end: '10:00' },
+    { start: '10:00', end: '12:00' },
+    { start: '12:00', end: '14:00' },
+    { start: '14:00', end: '16:00' },
+    { start: '16:00', end: '18:00' },
+    { start: '18:00', end: '20:00' },
+  ];
+
+  // Distribuir los bloques en los días de la semana con horarios aleatorios
+  for (let i = 0; i < numberOfBlocks; i++) {
+    const dayIndex = i % daysOfWeek.length;
+    const day = daysOfWeek[dayIndex];
+
+    // Seleccionar un horario aleatorio
+    const randomSlotIndex = Math.floor(Math.random() * timeSlots.length);
+    const randomSlot = timeSlots[randomSlotIndex];
+
+    blocks.push({
+      dayOfWeek: day,
+      startTime: randomSlot.start,
+      endTime: randomSlot.end,
+    });
+  }
+
+  return blocks;
+}
+
 // GET - Obtener todos los cursos
 export async function GET(request: NextRequest) {
   const client = new Client({
@@ -72,6 +115,18 @@ export async function POST(request: NextRequest) {
 
     await client.connect();
 
+    // Validar que el código del curso no exista
+    const codeCheckQuery = 'SELECT id FROM courses WHERE code = $1';
+    const codeCheckResult = await client.query(codeCheckQuery, [code]);
+
+    if (codeCheckResult.rows.length > 0) {
+      await client.end();
+      return NextResponse.json(
+        { error: `El código de curso "${code}" ya existe. Por favor usa un código diferente.` },
+        { status: 400 }
+      );
+    }
+
     // Obtener nombre del profesor
     const teacherQuery = 'SELECT name FROM teachers WHERE id = $1';
     const teacherResult = await client.query(teacherQuery, [teacher_id]);
@@ -110,12 +165,39 @@ export async function POST(request: NextRequest) {
       end_time || null,
     ]);
 
+    const createdCourse = result.rows[0];
+
+    // Generar horarios automáticamente basado en créditos
+    const scheduleBlocks = generateScheduleBlocks(credits);
+    const schedules = [];
+
+    for (const block of scheduleBlocks) {
+      const scheduleId = uuidv4();
+      const insertScheduleQuery = `
+        INSERT INTO schedules (id, course_id, teacher_id, day_of_week, start_time, end_time)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, course_id, teacher_id, day_of_week, start_time, end_time
+      `;
+
+      const scheduleResult = await client.query(insertScheduleQuery, [
+        scheduleId,
+        courseId,
+        teacher_id,
+        block.dayOfWeek,
+        block.startTime,
+        block.endTime,
+      ]);
+
+      schedules.push(scheduleResult.rows[0]);
+    }
+
     await client.end();
 
     return NextResponse.json(
       {
         message: '✅ Curso creado correctamente',
-        course: result.rows[0],
+        course: createdCourse,
+        schedules: schedules,
       },
       { status: 201 }
     );

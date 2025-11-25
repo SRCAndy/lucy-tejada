@@ -46,9 +46,6 @@ export default function CoursesManagementPage() {
     teacher_id: '',
     credits: '',
     capacity: '',
-    days_of_week: '',
-    start_time: '',
-    end_time: '',
   });
 
   // Cargar cursos y profesores
@@ -67,7 +64,9 @@ export default function CoursesManagementPage() {
           setCourses(coursesData);
         }
         if (teachersRes.ok) {
-          setTeachers(teachersData);
+          // El endpoint retorna { teachers: [...] }
+          const teachers = teachersData.teachers || [];
+          setTeachers(Array.isArray(teachers) ? teachers : []);
         }
       } catch (err) {
         console.error('Error:', err);
@@ -103,9 +102,6 @@ export default function CoursesManagementPage() {
           teacher_id: formData.teacher_id,
           credits: parseInt(formData.credits),
           capacity: parseInt(formData.capacity),
-          days_of_week: formData.days_of_week || null,
-          start_time: formData.start_time || null,
-          end_time: formData.end_time || null,
         }),
       });
 
@@ -120,9 +116,6 @@ export default function CoursesManagementPage() {
           teacher_id: '',
           credits: '',
           capacity: '',
-          days_of_week: '',
-          start_time: '',
-          end_time: '',
         });
         setShowForm(false);
         setTimeout(() => setSuccess(''), 3000);
@@ -231,15 +224,16 @@ export default function CoursesManagementPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="credits">Créditos</Label>
-                  <Input
-                    id="credits"
-                    type="number"
-                    placeholder="Ej: 3"
-                    value={formData.credits}
-                    onChange={(e) => handleInputChange('credits', e.target.value)}
-                    disabled={saving}
-                    required
-                  />
+                  <Select value={formData.credits} onValueChange={(value) => handleInputChange('credits', value)} disabled={saving}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona créditos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2">2 Créditos (2 horas semanales)</SelectItem>
+                      <SelectItem value="3">3 Créditos (4 horas semanales)</SelectItem>
+                      <SelectItem value="4">4 Créditos (6 horas semanales)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="capacity">Capacidad</Label>
@@ -251,36 +245,6 @@ export default function CoursesManagementPage() {
                     onChange={(e) => handleInputChange('capacity', e.target.value)}
                     disabled={saving}
                     required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="days_of_week">Días (opcional)</Label>
-                  <Input
-                    id="days_of_week"
-                    placeholder="Ej: Lun, Mié, Vie"
-                    value={formData.days_of_week}
-                    onChange={(e) => handleInputChange('days_of_week', e.target.value)}
-                    disabled={saving}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="start_time">Hora de Inicio (opcional)</Label>
-                  <Input
-                    id="start_time"
-                    type="time"
-                    value={formData.start_time}
-                    onChange={(e) => handleInputChange('start_time', e.target.value)}
-                    disabled={saving}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="end_time">Hora de Fin (opcional)</Label>
-                  <Input
-                    id="end_time"
-                    type="time"
-                    value={formData.end_time}
-                    onChange={(e) => handleInputChange('end_time', e.target.value)}
-                    disabled={saving}
                   />
                 </div>
               </div>
@@ -348,9 +312,6 @@ export default function CoursesManagementPage() {
                     <p className="text-sm text-gray-600">Profesor: {course.teacher}</p>
                     <p className="text-sm text-gray-600">Créditos: {course.credits} | Capacidad: {course.capacity}</p>
                     <p className="text-sm text-gray-600">Estudiantes inscritos: {course.student_ids?.length || 0}</p>
-                    {course.days_of_week && (
-                      <p className="text-sm text-gray-600">Horario: {course.days_of_week} {course.start_time} - {course.end_time}</p>
-                    )}
                   </div>
                   <div className="flex gap-2">
                     <Button 
