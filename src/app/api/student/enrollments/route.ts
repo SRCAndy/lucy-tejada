@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 // POST - Matricular estudiante en un curso
 export async function POST(request: NextRequest) {
-  const client = new Client({
+const client = new Client({
     host: process.env.DB_HOST,
     port: parseInt(process.env.DB_PORT || '5432'),
     user: process.env.DB_USER,
